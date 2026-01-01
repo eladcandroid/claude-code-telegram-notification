@@ -2,9 +2,8 @@ import { Bot, type Context } from "grammy";
 import type { Env } from "../../lib/types";
 import { createUser, deleteUser, findUserKeyByChatId, generateInstallKey } from "../users/service";
 
-function buildInstallCommand(repoRawUrl: string, workerUrl: string, key: string): string {
-  const hookUrl = `${repoRawUrl}/hooks/telegram-notify.sh`;
-  return `curl -fsSL ${repoRawUrl}/scripts/install.sh | WORKER_URL=${workerUrl} HOOK_URL=${hookUrl} bash -s -- ${key}`;
+function buildInstallCommand(repoRawUrl: string, key: string): string {
+  return `curl -fsSL ${repoRawUrl}/scripts/install.sh | bash -s -- ${key}`;
 }
 
 export interface BotContext extends Context {
@@ -28,11 +27,7 @@ export function createBot(token: string, env: Env): Bot<BotContext> {
     const existing = await findUserKeyByChatId(ctx.env.USERS, chatId);
 
     if (existing) {
-      const installCommand = buildInstallCommand(
-        ctx.env.REPO_RAW_URL,
-        ctx.env.WORKER_URL,
-        existing.key,
-      );
+      const installCommand = buildInstallCommand(ctx.env.REPO_RAW_URL, existing.key);
       await ctx.reply(
         `
 Hey ${username}! You already have an install key.
@@ -52,11 +47,7 @@ Use /revoke to revoke your key if needed.
     const installKey = generateInstallKey();
     await createUser(ctx.env.USERS, installKey, { chatId, username });
 
-    const installCommand = buildInstallCommand(
-      ctx.env.REPO_RAW_URL,
-      ctx.env.WORKER_URL,
-      installKey,
-    );
+    const installCommand = buildInstallCommand(ctx.env.REPO_RAW_URL, installKey);
     await ctx.reply(
       `
 Hey ${username}!

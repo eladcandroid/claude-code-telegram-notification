@@ -7,9 +7,10 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Configuration from environment variables
-WORKER_URL="${WORKER_URL:?Error: WORKER_URL environment variable is required}"
-HOOK_URL="${HOOK_URL:?Error: HOOK_URL environment variable is required}"
+# Configuration (can be overridden via environment variables)
+REPO_RAW_URL="${REPO_RAW_URL:-https://raw.githubusercontent.com/eladcandroid/claude-code-telegram-notification/main}"
+WORKER_URL="${WORKER_URL:-https://claude-code-telegram-bot.eladc-android.workers.dev}"
+HOOK_URL="${HOOK_URL:-$REPO_RAW_URL/hooks/telegram-notify.sh}"
 HOOKS_DIR="$HOME/.claude/hooks"
 SETTINGS_FILE="$HOME/.claude/settings.json"
 

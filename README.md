@@ -4,7 +4,7 @@ Get notified on Telegram when your Claude Code sessions end.
 
 ## Installation
 
-1. Start a chat with the Telegram bot (link provided after deployment)
+1. Start a chat with [@ccnotifiermasterbot](https://t.me/ccnotifiermasterbot)
 2. Send `/start`
 3. Run the command the bot sends you
 4. Done!

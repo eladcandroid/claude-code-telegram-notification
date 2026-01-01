@@ -5,7 +5,7 @@ describe("Worker", () => {
   it("responds to GET with health check", async () => {
     const response = await SELF.fetch("https://example.com/");
     expect(response.status).toBe(200);
-    expect(await response.text()).toBe("OpenCode Telegram Bot is running");
+    expect(await response.text()).toBe("Claude Code Telegram Bot is running");
   });
 
   it("returns 404 for unknown routes", async () => {

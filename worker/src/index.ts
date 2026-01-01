@@ -8,7 +8,7 @@ const app = new Hono<{ Bindings: Env }>();
 
 // Health check
 app.get("/", (c) => {
-  return c.text("OpenCode Telegram Bot is running");
+  return c.text("Claude Code Telegram Bot is running");
 });
 
 // Mount feature routers

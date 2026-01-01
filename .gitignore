@@ -27,3 +27,6 @@ Thumbs.db
 
 .idea/
 docs/plans/*
+
+# Claude Code local settings
+.claude/

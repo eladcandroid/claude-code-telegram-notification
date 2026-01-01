@@ -2,11 +2,9 @@ import { Bot, type Context } from "grammy";
 import type { Env } from "../../lib/types";
 import { createUser, deleteUser, findUserKeyByChatId, generateInstallKey } from "../users/service";
 
-const REPO_RAW_URL =
-  "https://raw.githubusercontent.com/Davasny/opencode-telegram-notification-plugin/main";
-
-function buildInstallCommand(key: string): string {
-  return `curl -fsSL ${REPO_RAW_URL}/scripts/install.sh | bash -s -- ${key}`;
+function buildInstallCommand(repoRawUrl: string, workerUrl: string, key: string): string {
+  const hookUrl = `${repoRawUrl}/hooks/telegram-notify.sh`;
+  return `curl -fsSL ${repoRawUrl}/scripts/install.sh | WORKER_URL=${workerUrl} HOOK_URL=${hookUrl} bash -s -- ${key}`;
 }
 
 export interface BotContext extends Context {
@@ -30,12 +28,16 @@ export function createBot(token: string, env: Env): Bot<BotContext> {
     const existing = await findUserKeyByChatId(ctx.env.USERS, chatId);
 
     if (existing) {
-      const installCommand = buildInstallCommand(existing.key);
+      const installCommand = buildInstallCommand(
+        ctx.env.REPO_RAW_URL,
+        ctx.env.WORKER_URL,
+        existing.key,
+      );
       await ctx.reply(
         `
 Hey ${username}! You already have an install key.
 
-*Run this command to install the plugin:*
+*Run this command to install the hook:*
 \`\`\`bash
 ${installCommand}
 \`\`\`
@@ -50,19 +52,23 @@ Use /revoke to revoke your key if needed.
     const installKey = generateInstallKey();
     await createUser(ctx.env.USERS, installKey, { chatId, username });
 
-    const installCommand = buildInstallCommand(installKey);
+    const installCommand = buildInstallCommand(
+      ctx.env.REPO_RAW_URL,
+      ctx.env.WORKER_URL,
+      installKey,
+    );
     await ctx.reply(
       `
 Hey ${username}!
 
-I'll notify you when your OpenCode sessions complete.
+I'll notify you when your Claude Code sessions end.
 
 *Run this command to install:*
 \`\`\`bash
 ${installCommand}
 \`\`\`
 
-After installation, you'll receive a notification whenever OpenCode finishes a task.
+After installation, you'll receive a notification whenever a Claude Code session ends.
 
 Commands:
 /revoke - Revoke your current key
@@ -81,7 +87,7 @@ Commands:
     if (existing) {
       await deleteUser(ctx.env.USERS, existing.key);
       await ctx.reply(
-        "Your key has been revoked. Your plugin will stop working.\n\nUse /start to generate a new key.",
+        "Your key has been revoked. Your hook will stop working.\n\nUse /start to generate a new key.",
       );
     } else {
       await ctx.reply("You don't have an active key to revoke. Use /start to generate one.");
@@ -96,7 +102,7 @@ Commands:
 
     if (existing) {
       await ctx.reply(
-        "You have an active install key.\n\nIf you've installed the plugin, you should receive notifications when OpenCode sessions complete.",
+        "You have an active install key.\n\nIf you've installed the hook, you should receive notifications when Claude Code sessions end.",
       );
     } else {
       await ctx.reply("You don't have an install key yet. Send /start to get one.");
@@ -107,7 +113,7 @@ Commands:
   bot.command("help", async (ctx) => {
     await ctx.reply(
       `
-*OpenCode Telegram Notifications*
+*Claude Code Telegram Notifications*
 
 Commands:
 /start - Get installation command
@@ -117,10 +123,10 @@ Commands:
 
 *How it works:*
 1. Run the install command from /start
-2. Restart OpenCode
-3. Get notified when sessions complete!
+2. Restart Claude Code
+3. Get notified when sessions end!
 
-[GitHub Repository](https://github.com/Davasny/opencode-telegram-notification-plugin)
+[GitHub Repository](${ctx.env.GITHUB_REPO_URL})
 `.trim(),
       { parse_mode: "Markdown" },
     );

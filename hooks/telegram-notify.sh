@@ -9,13 +9,13 @@ WORKER_URL="__WORKER_URL__"
 INPUT=$(cat)
 
 # Parse fields using jq
-REASON=$(echo "$INPUT" | jq -r '.reason // empty')
+STOP_HOOK_ACTIVE=$(echo "$INPUT" | jq -r '.stop_hook_active // false')
 CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty')
 TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.transcript_path // empty')
 
-# Skip if session was cleared or user logged out
-if [[ "$REASON" == "clear" || "$REASON" == "logout" ]]; then
+# Skip if already in a stop hook cycle (prevents infinite loops)
+if [[ "$STOP_HOOK_ACTIVE" == "true" ]]; then
   exit 0
 fi
 
@@ -41,8 +41,8 @@ if [[ -f "$TRANSCRIPT_PATH" ]]; then
     fi
   fi
 
-  # Try to get session title from first user message
-  SESSION_TITLE=$(jq -r 'select(.type == "user") | .message.content // empty' "$TRANSCRIPT_PATH" 2>/dev/null | head -1 | cut -c1-100 || true)
+  # Try to get session title from first user message (only check first 50 lines for speed)
+  SESSION_TITLE=$(head -50 "$TRANSCRIPT_PATH" 2>/dev/null | jq -r 'select(.type == "user") | .message.content // empty' 2>/dev/null | head -1 | cut -c1-100 || true)
 fi
 
 # Build JSON payload
@@ -58,6 +58,6 @@ curl -sS -X POST "$WORKER_URL/notify" \
   -H "Content-Type: application/json" \
   -d "$PAYLOAD" \
   --max-time 5 \
-  > /dev/null 2>&1 || true
+  > /dev/null 2>&1 &
 
 exit 0

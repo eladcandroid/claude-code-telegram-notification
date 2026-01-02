@@ -4,9 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Telegram notification system for Claude Code. When a Claude Code session ends, users receive a Telegram message. The project consists of two parts:
+This is a Telegram notification system for Claude Code. Users receive Telegram messages when:
+- Claude finishes responding (waiting for input)
+- Claude needs permission to run a tool
 
-- **hooks/** - Shell script hook that runs on SessionEnd and sends notifications to the worker
+The project consists of two parts:
+
+- **hooks/** - Shell script hooks that run on various Claude Code events and send notifications to the worker
 - **worker/** - Cloudflare Worker that handles Telegram bot commands and delivers notifications
 
 ## Commands
@@ -35,13 +39,18 @@ pnpm exec wrangler deploy
 
 ## Architecture
 
-### Hook (hooks/)
-- `telegram-notify.sh` - Shell script triggered by Claude Code's SessionEnd hook
-- Reads JSON input from stdin (session_id, cwd, transcript_path, reason)
-- Skips notifications if session was cleared or user logged out
-- Extracts project name from working directory
-- Optionally parses transcript for session title and duration
-- Sends POST to worker `/notify` endpoint with install key
+### Hooks (hooks/)
+- `telegram-notify.sh` - Triggered on Stop (Claude finishes responding)
+  - Reads JSON input from stdin (session_id, cwd, transcript_path, stop_hook_active)
+  - Skips if stop_hook_active is true (prevents infinite loops)
+  - Extracts project name from working directory
+  - Optionally parses transcript for session title and duration
+  - Sends POST to worker `/notify` endpoint with install key
+
+- `telegram-notification.sh` - Triggered on Notification events
+  - Handles `permission_prompt` (Claude needs permission to run a tool)
+  - Reads JSON input with notification_type and message
+  - Sends formatted notification to Telegram
 
 ### Worker (worker/)
 - Hono-based Cloudflare Worker with grammY for Telegram bot
@@ -53,13 +62,16 @@ pnpm exec wrangler deploy
 ### Install Flow
 1. User sends /start to Telegram bot → bot generates UUID, stores chatId in KV
 2. User runs curl install script with UUID
-3. Script downloads hook to `~/.claude/hooks/telegram-notify.sh`
-4. Script updates `~/.claude/settings.json` with SessionEnd hook config
-5. Placeholders in hook are replaced with key/URL
+3. Script downloads hooks to `~/.claude/hooks/`:
+   - `telegram-notify.sh` (Stop)
+   - `telegram-notification.sh` (Notification)
+4. Script updates `~/.claude/settings.json` with hook configs (Stop, Notification with permission_prompt matcher)
+5. Placeholders in hooks are replaced with key/URL
 
 ## Key Files
 
-- `hooks/telegram-notify.sh` - The hook script (placeholders replaced at install time)
+- `hooks/telegram-notify.sh` - Stop hook script (placeholders replaced at install time)
+- `hooks/telegram-notification.sh` - Notification hook script for permission prompts
 - `scripts/install.sh` - User-facing installation script
 - `worker/src/features/users/service.ts` - KV operations for user management
 - `worker/src/features/notify/router.ts` - Notification endpoint that sends Telegram messages

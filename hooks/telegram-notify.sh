@@ -5,11 +5,6 @@ set -e
 INSTALL_KEY="__INSTALL_KEY__"
 WORKER_URL="__WORKER_URL__"
 
-# Check if configured
-if [[ "$INSTALL_KEY" == "__INSTALL_KEY__" ]] || [[ "$WORKER_URL" == "__WORKER_URL__" ]]; then
-  exit 0
-fi
-
 # Read JSON input from stdin
 INPUT=$(cat)
 

@@ -32,14 +32,22 @@ PROJECT_NAME=$(basename "$CWD")
 # Debug: log transcript path
 echo "TRANSCRIPT_PATH: $TRANSCRIPT_PATH" >> "$DEBUG_LOG"
 
-# Calculate session duration from transcript if available
+# Calculate session duration and extract stats from transcript if available
 DURATION_MS=""
 SESSION_TITLE=""
+INPUT_TOKENS=""
+OUTPUT_TOKENS=""
+COST_ESTIMATE=""
+LAST_RESPONSE=""
+FILES_MODIFIED=""
+COMMANDS_RUN=""
+
 if [[ -f "$TRANSCRIPT_PATH" ]]; then
   echo "TRANSCRIPT EXISTS: yes" >> "$DEBUG_LOG"
   echo "TRANSCRIPT LINE COUNT: $(wc -l < "$TRANSCRIPT_PATH")" >> "$DEBUG_LOG"
   echo "LAST 3 LINES:" >> "$DEBUG_LOG"
   tail -3 "$TRANSCRIPT_PATH" >> "$DEBUG_LOG" 2>&1 || true
+
   # Get first and last timestamps from transcript
   FIRST_TS=$(head -1 "$TRANSCRIPT_PATH" 2>/dev/null | jq -r '.timestamp // empty' 2>/dev/null || true)
   LAST_TS=$(tail -1 "$TRANSCRIPT_PATH" 2>/dev/null | jq -r '.timestamp // empty' 2>/dev/null || true)
@@ -65,17 +73,59 @@ if [[ -f "$TRANSCRIPT_PATH" ]]; then
   SESSION_TITLE=$(jq -sr '[.[] | select(.type == "user")] | last | .message.content | if type == "array" then map(select(.type == "text") | .text) | join(" ") else . end // empty' "$TRANSCRIPT_PATH" 2>/dev/null | head -1 | cut -c1-100 || true)
 
   echo "EXTRACTED SESSION_TITLE: $SESSION_TITLE" >> "$DEBUG_LOG"
+
+  # Extract token usage - sum all input_tokens and output_tokens from usage fields
+  INPUT_TOKENS=$(jq -sr '[.[] | .usage.input_tokens // 0] | add // 0' "$TRANSCRIPT_PATH" 2>/dev/null || echo "0")
+  OUTPUT_TOKENS=$(jq -sr '[.[] | .usage.output_tokens // 0] | add // 0' "$TRANSCRIPT_PATH" 2>/dev/null || echo "0")
+
+  echo "INPUT_TOKENS: $INPUT_TOKENS, OUTPUT_TOKENS: $OUTPUT_TOKENS" >> "$DEBUG_LOG"
+
+  # Calculate cost estimate (Sonnet pricing: $3/MTok input, $15/MTok output)
+  if [[ -n "$INPUT_TOKENS" && -n "$OUTPUT_TOKENS" && "$INPUT_TOKENS" != "0" ]]; then
+    # Use awk for floating point math (more portable than bc)
+    COST_ESTIMATE=$(awk "BEGIN {printf \"%.4f\", ($INPUT_TOKENS * 0.000003) + ($OUTPUT_TOKENS * 0.000015)}")
+    echo "COST_ESTIMATE: $COST_ESTIMATE" >> "$DEBUG_LOG"
+  fi
+
+  # Extract last assistant response (truncated to 200 chars)
+  LAST_RESPONSE=$(jq -sr '[.[] | select(.type == "assistant")] | last | .message.content | if type == "array" then map(select(.type == "text") | .text) | join(" ") else . end // empty' "$TRANSCRIPT_PATH" 2>/dev/null | head -1 | cut -c1-200 || true)
+
+  echo "LAST_RESPONSE: $LAST_RESPONSE" >> "$DEBUG_LOG"
+
+  # Count files modified (unique file paths from Write and Edit tool calls)
+  FILES_MODIFIED=$(jq -sr '[.[] | select(.type == "tool_use") | select(.name == "Write" or .name == "Edit") | .input.file_path // .input.path] | unique | length' "$TRANSCRIPT_PATH" 2>/dev/null || echo "0")
+
+  echo "FILES_MODIFIED: $FILES_MODIFIED" >> "$DEBUG_LOG"
+
+  # Count bash commands run
+  COMMANDS_RUN=$(jq -sr '[.[] | select(.type == "tool_use") | select(.name == "Bash")] | length' "$TRANSCRIPT_PATH" 2>/dev/null || echo "0")
+
+  echo "COMMANDS_RUN: $COMMANDS_RUN" >> "$DEBUG_LOG"
 else
   echo "TRANSCRIPT EXISTS: no" >> "$DEBUG_LOG"
 fi
 
-# Build JSON payload
+# Build JSON payload with all available fields
 PAYLOAD=$(jq -n \
   --arg key "$INSTALL_KEY" \
   --arg project "$PROJECT_NAME" \
   --arg sessionTitle "$SESSION_TITLE" \
   --argjson durationMs "${DURATION_MS:-null}" \
-  '{key: $key, project: $project} + (if $sessionTitle != "" then {sessionTitle: $sessionTitle} else {} end) + (if $durationMs != null then {durationMs: $durationMs} else {} end)')
+  --argjson inputTokens "${INPUT_TOKENS:-null}" \
+  --argjson outputTokens "${OUTPUT_TOKENS:-null}" \
+  --argjson costEstimate "${COST_ESTIMATE:-null}" \
+  --arg lastResponse "$LAST_RESPONSE" \
+  --argjson filesModified "${FILES_MODIFIED:-null}" \
+  --argjson commandsRun "${COMMANDS_RUN:-null}" \
+  '{key: $key, project: $project} +
+   (if $sessionTitle != "" then {sessionTitle: $sessionTitle} else {} end) +
+   (if $durationMs != null then {durationMs: $durationMs} else {} end) +
+   (if $inputTokens != null and $inputTokens > 0 then {inputTokens: $inputTokens} else {} end) +
+   (if $outputTokens != null and $outputTokens > 0 then {outputTokens: $outputTokens} else {} end) +
+   (if $costEstimate != null and $costEstimate > 0 then {costEstimate: $costEstimate} else {} end) +
+   (if $lastResponse != "" then {lastResponse: $lastResponse} else {} end) +
+   (if $filesModified != null and $filesModified > 0 then {filesModified: $filesModified} else {} end) +
+   (if $commandsRun != null and $commandsRun > 0 then {commandsRun: $commandsRun} else {} end)')
 
 # Debug: log final payload
 echo "FINAL PAYLOAD: $PAYLOAD" >> "$DEBUG_LOG"

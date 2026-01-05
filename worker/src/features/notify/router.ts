@@ -26,8 +26,8 @@ function formatCost(cost: number): string {
 }
 
 function escapeMarkdown(text: string): string {
-  // Escape special Telegram markdown characters
-  return text.replace(/[`*_[\]()~>#+=|{}.!-]/g, "\\$&");
+  // Escape special Telegram markdown characters (only the essential ones)
+  return text.replace(/[`*_[\]()~>#+|{}]/g, "\\$&");
 }
 
 interface NotificationData {
